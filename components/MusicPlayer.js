@@ -1,6 +1,18 @@
 import Slider from '@react-native-community/slider';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, SafeAreaView, TouchableOpacity, Dimensions, Image, Text, FlatList, Animated } from 'react-native';
+import { 
+    View, 
+    StyleSheet, 
+    SafeAreaView, 
+    TouchableOpacity, 
+    Dimensions, 
+    Image, 
+    Text, 
+    FlatList, 
+    Animated,
+    PermissionsAndroid,
+    Platform
+} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import TrackPlayer, {
@@ -12,7 +24,7 @@ import TrackPlayer, {
     useProgress,
     useTrackPlayerEvents,
 } from 'react-native-track-player';
-
+import RNFS from 'react-native-fs';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,13 +43,12 @@ const requestStoragePermission = async () => {
             );
             return granted === PermissionsAndroid.RESULTS.GRANTED;
         }
-        return true; // Sur iOS ou autres plateformes, retourne true directement
+        return true;
     } catch (err) {
         console.warn('Erreur lors de la demande de permission:', err);
         return false;
     }
 };
-
 
 const getAudioFiles = async () => {
     try {
@@ -47,24 +58,22 @@ const getAudioFiles = async () => {
             return [];
         }
 
-        const path = RNFS.ExternalStorageDirectoryPath + '/Music';  // Répertoire Music sur Android
-        const files = await RNFS.readDir(path);  // Récupère les fichiers dans le répertoire
-        // Liste des extensions audio courantes
+        const path = RNFS.ExternalStorageDirectoryPath + '/Music';
+        const files = await RNFS.readDir(path);
         const audioExtensions = ['.mp3', '.wav', '.flac', '.aac', '.m4a'];
 
         const audioFiles = files.filter(file => {
-            // Filtre les fichiers qui ont une extension audio valide
-            return file.isFile() && audioExtensions.some(ext => file.name.endsWith(ext));
+            return file.isFile() && audioExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
         });
 
         const songs = audioFiles.map(file => ({
-            id: file.path,  // Utilisation du chemin comme ID unique
-            title: file.name.replace(/\.[^/.]+$/, ''),  // Supprime l'extension du nom de fichier
-            artwork: require('../assets/default_artwork.png'),  // Image par défaut
-            artist: 'Artiste inconnu',  // On peut extraire des métadonnées si nécessaire
-            url: file.path,  // Ajout du chemin de l'audio
+            id: file.path,
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            artwork: require('../assets/default_artwork.png'),
+            artist: 'Artiste inconnu',
+            url: `file://${file.path}`,
         }));
-        return songs;  // Retourne la liste des chansons
+        return songs;
     } catch (error) {
         console.error('Error reading files:', error);
         return [];
@@ -72,35 +81,49 @@ const getAudioFiles = async () => {
 };
 
 const setupPlayer = async () => {
-    await TrackPlayer.setupPlayer();
-    await TrackPlayer.updateOptions({
-        stoppingAppPausesPlayback: true,
-        capabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
-            Capability.Stop,
-        ],
-        compactCapabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
-        ],
-        notification: {
-            title: 'Titre par défaut',
-            artist: 'Artiste par défaut',
-            artwork: require('../assets/default_artwork.png'),
-        },
-    });
-    
+    try {
+        await TrackPlayer.setupPlayer();
+        const songs = await getAudioFiles();
+        
+        if (songs.length === 0) {
+            console.log("Aucune musique trouvée");
+            return false;
+        }
 
+        await TrackPlayer.reset();
+        await TrackPlayer.add(songs);
 
-    await TrackPlayer.add(getAudioFiles);
+        await TrackPlayer.updateOptions({
+            stoppingAppPausesPlayback: true,
+            capabilities: [
+                Capability.Play,
+                Capability.Pause,
+                Capability.SkipToNext,
+                Capability.SkipToPrevious,
+                Capability.SeekTo,
+                Capability.Stop,
+            ],
+            compactCapabilities: [
+                Capability.Play,
+                Capability.Pause,
+                Capability.SkipToNext,
+                Capability.SkipToPrevious,
+            ],
+            notification: {
+                title: 'Musique en cours',
+                artist: 'Artiste inconnu',
+                artwork: require('../assets/default_artwork.png'),
+            },
+        });
+
+        return true;
+    } catch (error) {
+        console.error("Erreur lors du setup du player:", error);
+        return false;
+    }
 };
 
-const togglePlayback = async () => {
+const togglePlayback = async (playbackState) => {
     try {
         const currentTrack = await TrackPlayer.getCurrentTrack();
         if (currentTrack == null) {
@@ -108,43 +131,12 @@ const togglePlayback = async () => {
             return;
         }
 
-        const state = await TrackPlayer.getState(); // Récupérer l'état actuel
-        console.log("Playback State:", state);
-
-        if (state === State.Playing) {
+        if (playbackState === State.Playing) {
             await TrackPlayer.pause();
             console.log("Mise en pause");
-            await TrackPlayer.updateOptions({
-                nowPlaying: {
-                    title: trackTitle,
-                    artist: trackArtist,
-                    artwork: trackArtwork
-                },
-                capabilities: [
-                    Capability.Play,
-                    Capability.Pause,
-                    Capability.SkipToNext,
-                    Capability.SkipToPrevious,
-                    Capability.Stop,
-                ]
-            });
         } else {
             await TrackPlayer.play();
             console.log("Lecture en cours");
-            await TrackPlayer.updateOptions({
-                nowPlaying: {
-                    title: trackTitle,
-                    artist: trackArtist,
-                    artwork: trackArtwork
-                },
-                capabilities: [
-                    Capability.Play,
-                    Capability.Pause,
-                    Capability.SkipToNext,
-                    Capability.SkipToPrevious,
-                    Capability.Stop,
-                ]
-            });
         }
     } catch (error) {
         console.error("Erreur dans togglePlayback :", error);
@@ -152,146 +144,161 @@ const togglePlayback = async () => {
 };
 
 const MusicPlayer = () => {
+
     const playbackState = usePlaybackState();
     const progress = useProgress();
 
     const [trackArtwork, setTrackArtwork] = useState();
     const [trackArtist, setTrackArtist] = useState();
     const [trackTitle, setTrackTitle] = useState();
+    const [songs, setSongs] = useState([]);
+    const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
 
     const scrollX = useRef(new Animated.Value(0)).current;
     const [songIndex, setSongIndex] = useState(0);
     const [repeatMode, setRepeateMode] = useState('off');
     
     const songSlider = useRef(null);
+    const isScrolling = useRef(false);
 
-    useTrackPlayerEvents([Event.PlaybackTrackChanged], async event => {
+    const updateTrackInfo = async (index) => {
+        if (songs.length === 0 || index < 0 || index >= songs.length) return;
+        
+        const track = songs[index];
+        setTrackTitle(track.title);
+        setTrackArtist(track.artist);
+        setTrackArtwork(track.artwork);
+        setCurrentTrackIndex(index);
+        
+        await TrackPlayer.skip(index);
+        await TrackPlayer.play();
+    };
+
+    const handleScrollEnd = async (event) => {
+        const contentOffsetX = event.nativeEvent.contentOffset.x;
+        const newIndex = Math.round(contentOffsetX / width);
+        
+        if (newIndex !== currentTrackIndex) {
+            await updateTrackInfo(newIndex);
+        }
+        isScrolling.current = false;
+    };
+
+    const handleScrollBegin = () => {
+        isScrolling.current = true;
+    };
+
+    useTrackPlayerEvents([Event.PlaybackTrackChanged, Event.PlaybackState], async (event) => {
         if (event.type === Event.PlaybackTrackChanged && event.nextTrack != null) {
+            await updateTrackInfo();
+            
             const track = await TrackPlayer.getTrack(event.nextTrack);
-            const { title, artwork, artist } = track;
-            setTrackTitle(title);
-            setTrackArtwork(artwork);
-            setTrackArtist(artist);
-    
-            await TrackPlayer.updateOptions({
-                notification: {
-                    title: title,
-                    artist: artist,
-                    artwork: artwork,
-                },
-                capabilities: [
-                    Capability.Play,
-                    Capability.Pause,
-                    Capability.SkipToNext,
-                    Capability.SkipToPrevious,
-                    Capability.Stop,
-                ],
-                compactCapabilities: [
-                    Capability.Play,
-                    Capability.Pause,
-                    Capability.SkipToNext,
-                    Capability.SkipToPrevious,
-                ],
-            });
+            if (track) {
+                await TrackPlayer.updateOptions({
+                    notification: {
+                        title: track.title || 'Titre inconnu',
+                        artist: track.artist || 'Artiste inconnu',
+                        artwork: track.artwork || require('../assets/default_artwork.png'),
+                    },
+                });
+            }
         }
     });
 
     const repeatIcon = () => {
-        if (repeatMode == 'off') {
-            return 'repeat-off';
-        }if (repeatMode == 'track') {
-            return 'repeat-once';
-        }if (repeatMode == 'repeat') {
-            return 'repeat';
+        switch (repeatMode) {
+            case 'off': return 'repeat-off';
+            case 'track': return 'repeat-once';
+            case 'repeat': return 'repeat';
+            default: return 'repeat-off';
         }
-    }
+    };
 
     const changeRepeatMode = () => {
-        if (repeatMode == 'off') {
-            TrackPlayer.setRepeatMode(RepeatMode.Track);
-            setRepeateMode('track');
-        }if (repeatMode == 'track') {
-            TrackPlayer.setRepeatMode(RepeatMode.Queue);
-            setRepeateMode('repeat');
-        }if (repeatMode == 'repeat') {
-            TrackPlayer.setRepeatMode(RepeatMode.Off);
-            setRepeateMode('off');
+        switch (repeatMode) {
+            case 'off':
+                TrackPlayer.setRepeatMode(RepeatMode.Track);
+                setRepeatMode('track');
+                break;
+            case 'track':
+                TrackPlayer.setRepeatMode(RepeatMode.Queue);
+                setRepeatMode('repeat');
+                break;
+            case 'repeat':
+                TrackPlayer.setRepeatMode(RepeatMode.Off);
+                setRepeatMode('off');
+                break;
         }
-    }
+    };
 
     useEffect(() => {
-        const setup = async () => {
+        const initializePlayer = async () => {
             try {
-                await setupPlayer();
-                await TrackPlayer.updateOptions({
-                    stoppingAppPausesPlayback: true,
-                    capabilities: [
-                        Capability.Play,
-                        Capability.Pause,
-                        Capability.SkipToNext,
-                        Capability.SkipToPrevious,
-                    ],
-                    compactCapabilities: [Capability.Play, Capability.Pause],
-                });
-    
-                console.log("Player setup done !");
+                const success = await setupPlayer();
+                if (success) {
+                    const loadedSongs = await getAudioFiles();
+                    setSongs(loadedSongs);
+                    if (loadedSongs.length > 0) {
+                        await updateTrackInfo(0);
+                    }
+                }
             } catch (error) {
-                console.error("Erreur lors de l'initialisation du player :", error);
+                console.error("Erreur lors de l'initialisation:", error);
             }
         };
-    
-        setup();
 
-        const onRemotePlay = TrackPlayer.addEventListener(Event.RemotePlay, async () => {
-            await TrackPlayer.play();
-        });
-    
-        const onRemotePause = TrackPlayer.addEventListener(Event.RemotePause, async () => {
-            await TrackPlayer.pause();
-        });
-    
+        initializePlayer();
+
+        const onRemotePlay = TrackPlayer.addEventListener(Event.RemotePlay, () => TrackPlayer.play());
+        const onRemotePause = TrackPlayer.addEventListener(Event.RemotePause, () => TrackPlayer.pause());
         const onRemoteNext = TrackPlayer.addEventListener(Event.RemoteNext, async () => {
             await TrackPlayer.skipToNext();
             await TrackPlayer.play();
         });
-    
         const onRemotePrevious = TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
             await TrackPlayer.skipToPrevious();
             await TrackPlayer.play();
         });
-    
+
         scrollX.addListener(({ value }) => {
             const index = Math.round(value / width);
             setSongIndex(index);
         });
-    
+
         return () => {
             scrollX.removeAllListeners();
-
-            onRemotePlay.remove();
-            onRemotePause.remove();
-            onRemoteNext.remove();
-            onRemotePrevious.remove();
+            TrackPlayer.reset();
         };
     }, []);
 
     const skipToNext = async () => {
-        if (songIndex < getAudioFiles.length - 1) {
+        try {
             await TrackPlayer.skipToNext();
-            songSlider.current.scrollToOffset({
-                offset: (songIndex + 1) * width,
-            });
+            if (songIndex < songs.length - 1) {
+                songSlider.current?.scrollToOffset({
+                    offset: (songIndex + 1) * width,
+                });
+            }
             await TrackPlayer.play();
+        } catch (error) {
+            console.error("Erreur lors du skipToNext:", error);
         }
     };
     
     const skipToPrevious = async () => {
-        if (songIndex > 0) {
-            await TrackPlayer.skipToPrevious();
-            songSlider.current.scrollToOffset({
-                offset: (songIndex - 1) * width,
-            });
-            await TrackPlayer.play();
+        try {
+            if (progress.position > 3) {
+                await TrackPlayer.seekTo(0);
+            } else {
+                await TrackPlayer.skipToPrevious();
+                if (songIndex > 0) {
+                    songSlider.current?.scrollToOffset({
+                        offset: (songIndex - 1) * width,
+                    });
+                }
+            }
+        } catch (error) {
+            console.error("Erreur lors du skipToPrevious:", error);
         }
     };
 
@@ -299,7 +306,10 @@ const MusicPlayer = () => {
         return (
             <Animated.View style={style.mainImageWrapper}>
                 <View style={[style.imageWrapper, style.elevation]}>
-                    <Image source={trackArtwork} style={style.musicImage} />
+                    <Image 
+                        source={item.artwork || require('../assets/default_artwork.png')} 
+                        style={style.musicImage} 
+                    />
                 </View>
             </Animated.View>
         );
@@ -308,25 +318,21 @@ const MusicPlayer = () => {
     return (
         <SafeAreaView style={style.container}>
             <View style={style.mainContainer}>
-                <Animated.FlatList
+            <Animated.FlatList
                     ref={songSlider}
+                    data={songs}
                     renderItem={renderSongs}
-                    data={getAudioFiles}
                     keyExtractor={item => item.id}
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
-                    scrollEventThrottle={16}
-                    onScroll={Animated.event(
-                        [
-                            {
-                                nativeEvent: {
-                                    contentOffset: { x: scrollX },
-                                },
-                            },
-                        ],
-                        { useNativeDriver: false }
-                    )}
+                    onScrollBeginDrag={handleScrollBegin}
+                    onMomentumScrollEnd={handleScrollEnd}
+                    getItemLayout={(data, index) => ({
+                        length: width,
+                        offset: width * index,
+                        index,
+                    })}
                 />
 
                 <Text style={[style.songTitle, style.songContent]}>
@@ -348,22 +354,15 @@ const MusicPlayer = () => {
                         onSlidingComplete={async (value) => {
                             await TrackPlayer.seekTo(value);
                         }}
-                        onValueChange={(value) => {
-                            TrackPlayer.seekTo(value);
-                        }}
                     />
 
                     <View style={style.progressLevelDuration}>
                         <Text style={style.progressLabel}>
-                            {Math.floor(progress.position / 60).toString().padStart(2, '0')}:
-                            {Math.floor(progress.position % 60).toString().padStart(2, '0')}
+                            {new Date(progress.position * 1000).toISOString().substr(14, 5)}
                         </Text>
                         <Text style={style.progressLabel}>
-                            {Math.floor((progress.duration - progress.position) / 60).toString().padStart(2, '0')}:
-                            {Math.floor((progress.duration - progress.position) % 60).toString().padStart(2, '0')}
+                            -{new Date((progress.duration - progress.position) * 1000).toISOString().substr(14, 5)}
                         </Text>
-
-
                     </View>
                 </View>
 
@@ -371,7 +370,7 @@ const MusicPlayer = () => {
                     <TouchableOpacity onPress={skipToPrevious}>
                         <Ionicons name='play-skip-back-outline' size={35} color='#FFD369' />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={togglePlayback}>
+                    <TouchableOpacity onPress={() => togglePlayback(playbackState)}>
                         <Ionicons
                             name={playbackState === State.Playing ? 'pause-circle' : 'play-circle'}
                             size={75}
@@ -390,7 +389,11 @@ const MusicPlayer = () => {
                         <Ionicons name='heart-outline' size={30} color='#888888' />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={changeRepeatMode}>
-                        <MaterialCommunityIcons name={repeatIcon()} size={30} color={ repeatMode != 'off' ? '#FFD369' : '#888888'} />
+                        <MaterialCommunityIcons 
+                            name={repeatIcon()} 
+                            size={30} 
+                            color={repeatMode !== 'off' ? '#FFD369' : '#888888'} 
+                        />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => { }}>
                         <Ionicons name='share-outline' size={30} color='#888888' />
@@ -438,7 +441,6 @@ const style = StyleSheet.create({
         width: '100%',
         height: '100%',
         borderRadius: 15,
-        elevation: 5
     },
     elevation: {
         elevation: 5,
