@@ -14,24 +14,37 @@ import TrackPlayer, {
     useTrackPlayerEvents,
 } from 'react-native-track-player';
 
+
 const { width, height } = Dimensions.get('window');
 
 const setupPlayer = async () => {
     await TrackPlayer.setupPlayer();
     await TrackPlayer.updateOptions({
+        stoppingAppPausesPlayback: true,
         capabilities: [
             Capability.Play,
             Capability.Pause,
             Capability.SkipToNext,
             Capability.SkipToPrevious,
             Capability.Stop,
-        ]
+        ],
+        compactCapabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+        ],
+        notification: {
+            title: 'Titre par défaut',
+            artist: 'Artiste par défaut',
+            artwork: require('../assets/default_artwork.png'),
+        },
     });
     
 
-    await TrackPlayer.add(songs);
-}
 
+    await TrackPlayer.add(songs);
+};
 
 const togglePlayback = async () => {
     try {
@@ -99,23 +112,35 @@ const MusicPlayer = () => {
     const songSlider = useRef(null);
 
     useTrackPlayerEvents([Event.PlaybackTrackChanged], async event => {
-        if(event.type == Event.PlaybackTrackChanged && event.nextTrack != null){
+        if (event.type === Event.PlaybackTrackChanged && event.nextTrack != null) {
             const track = await TrackPlayer.getTrack(event.nextTrack);
-            const {title, artwork, artist} = track;
+            const { title, artwork, artist } = track;
             setTrackTitle(title);
             setTrackArtwork(artwork);
             setTrackArtist(artist);
-
+    
             await TrackPlayer.updateOptions({
-                // Mise à jour de la notification avec le titre de la chanson actuelle
-                nowPlaying: {
-                    title: track.title,
-                    artist: track.artist,
-                    artwork: track.artwork
-                }
-            })
+                notification: {
+                    title: title,
+                    artist: artist,
+                    artwork: artwork,
+                },
+                capabilities: [
+                    Capability.Play,
+                    Capability.Pause,
+                    Capability.SkipToNext,
+                    Capability.SkipToPrevious,
+                    Capability.Stop,
+                ],
+                compactCapabilities: [
+                    Capability.Play,
+                    Capability.Pause,
+                    Capability.SkipToNext,
+                    Capability.SkipToPrevious,
+                ],
+            });
         }
-    })
+    });
 
     const repeatIcon = () => {
         if (repeatMode == 'off') {
@@ -162,6 +187,24 @@ const MusicPlayer = () => {
         };
     
         setup();
+
+        const onRemotePlay = TrackPlayer.addEventListener(Event.RemotePlay, async () => {
+            await TrackPlayer.play();
+        });
+    
+        const onRemotePause = TrackPlayer.addEventListener(Event.RemotePause, async () => {
+            await TrackPlayer.pause();
+        });
+    
+        const onRemoteNext = TrackPlayer.addEventListener(Event.RemoteNext, async () => {
+            await TrackPlayer.skipToNext();
+            await TrackPlayer.play();
+        });
+    
+        const onRemotePrevious = TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
+            await TrackPlayer.skipToPrevious();
+            await TrackPlayer.play();
+        });
     
         scrollX.addListener(({ value }) => {
             const index = Math.round(value / width);
@@ -170,6 +213,11 @@ const MusicPlayer = () => {
     
         return () => {
             scrollX.removeAllListeners();
+
+            onRemotePlay.remove();
+            onRemotePause.remove();
+            onRemoteNext.remove();
+            onRemotePrevious.remove();
         };
     }, []);
 
