@@ -1,6 +1,6 @@
 import React from "react";
 import { View, StyleSheet, StatusBar } from "react-native";
-import MusicPlayer from "./screens/MusicPlayer";
+import MusicPlayer from "./components/MusicPlayer";
 
 const App = () => {
   return (
