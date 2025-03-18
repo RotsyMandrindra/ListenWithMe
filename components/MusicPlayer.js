@@ -3,7 +3,6 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, SafeAreaView, TouchableOpacity, Dimensions, Image, Text, FlatList, Animated } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import songs from '../model/Data';
 import TrackPlayer, {
     Capability,
     Event,
@@ -16,6 +15,32 @@ import TrackPlayer, {
 
 
 const { width, height } = Dimensions.get('window');
+
+const getAudioFiles = async () => {
+    try {
+        const path = RNFS.ExternalStorageDirectoryPath + '/Music';  // Répertoire Music sur Android
+        const files = await RNFS.readDir(path);  // Récupère les fichiers dans le répertoire
+        // Liste des extensions audio courantes
+        const audioExtensions = ['.mp3', '.wav', '.flac', '.aac', '.m4a'];
+
+        const audioFiles = files.filter(file => {
+            // Filtre les fichiers qui ont une extension audio valide
+            return file.isFile() && audioExtensions.some(ext => file.name.endsWith(ext));
+        });
+
+        const songs = audioFiles.map(file => ({
+            id: file.path,  // Utilisation du chemin comme ID unique
+            title: file.name.replace(/\.[^/.]+$/, ''),  // Supprime l'extension du nom de fichier
+            artwork: require('../assets/default_artwork.png'),  // Image par défaut
+            artist: 'Artiste inconnu',  // On peut extraire des métadonnées si nécessaire
+            url: file.path,  // Ajout du chemin de l'audio
+        }));
+        return songs;  // Retourne la liste des chansons
+    } catch (error) {
+        console.error('Error reading files:', error);
+        return [];
+    }
+};
 
 const setupPlayer = async () => {
     await TrackPlayer.setupPlayer();
@@ -43,7 +68,7 @@ const setupPlayer = async () => {
     
 
 
-    await TrackPlayer.add(songs);
+    await TrackPlayer.add(getAudioFiles);
 };
 
 const togglePlayback = async () => {
@@ -222,7 +247,7 @@ const MusicPlayer = () => {
     }, []);
 
     const skipToNext = async () => {
-        if (songIndex < songs.length - 1) {
+        if (songIndex < getAudioFiles.length - 1) {
             await TrackPlayer.skipToNext();
             songSlider.current.scrollToOffset({
                 offset: (songIndex + 1) * width,
@@ -257,7 +282,7 @@ const MusicPlayer = () => {
                 <Animated.FlatList
                     ref={songSlider}
                     renderItem={renderSongs}
-                    data={songs}
+                    data={getAudioFiles}
                     keyExtractor={item => item.id}
                     horizontal
                     pagingEnabled
