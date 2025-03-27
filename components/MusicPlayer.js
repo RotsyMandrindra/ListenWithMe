@@ -16,8 +16,37 @@ import TrackPlayer, {
 
 const { width, height } = Dimensions.get('window');
 
+const requestStoragePermission = async () => {
+    try {
+        if (Platform.OS === 'android') {
+            const granted = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+                {
+                    title: 'Permission requise',
+                    message: 'L\'application a besoin d\'accéder à vos fichiers audio',
+                    buttonNeutral: 'Demander plus tard',
+                    buttonNegative: 'Annuler',
+                    buttonPositive: 'OK',
+                }
+            );
+            return granted === PermissionsAndroid.RESULTS.GRANTED;
+        }
+        return true; // Sur iOS ou autres plateformes, retourne true directement
+    } catch (err) {
+        console.warn('Erreur lors de la demande de permission:', err);
+        return false;
+    }
+};
+
+
 const getAudioFiles = async () => {
     try {
+        const hasPermission = await requestStoragePermission();
+        if (!hasPermission) {
+            console.log('Permission refusée');
+            return [];
+        }
+
         const path = RNFS.ExternalStorageDirectoryPath + '/Music';  // Répertoire Music sur Android
         const files = await RNFS.readDir(path);  // Récupère les fichiers dans le répertoire
         // Liste des extensions audio courantes
