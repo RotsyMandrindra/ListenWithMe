@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, Button, PermissionsAndroid, Platform } from 'react-native';
-import MusicFiles from 'react-native-get-music-files';
+import { getAudioFiles } from './PlayerTest';
 
 const Playlist = () => {
   const [songs, setSongs] = useState([]);
@@ -33,15 +33,7 @@ const Playlist = () => {
     requestPermission();
   }, []);
 
-  const loadSongs = () => {
-    MusicFiles.getAll()
-      .then((tracks) => {
-        setSongs(tracks);
-      })
-      .catch((error) => {
-        console.log(error);
-      });
-  };
+  const loadSongs = getAudioFiles();
 
   // Fonctions pour gérer les playlists
   const createPlaylist = (name) => {

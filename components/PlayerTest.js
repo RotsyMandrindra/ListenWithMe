@@ -51,7 +51,7 @@ const requestStoragePermission = async () => {
     }
 };
 
-const getAudioFiles = async () => {
+export const getAudioFiles = async () => {
     try {
         const hasPermission = await requestStoragePermission();
         if (!hasPermission) {
